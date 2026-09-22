@@ -20,4 +20,3 @@ A clean, modern, and responsive chatbot interface built with *React.js* and *Vit
 ## Notes
 * API key is stored in a .env file and excluded from version control via .gitignore.
 * Model name may require updates over time as Google deprecates older Gemini model versions.
-*
