@@ -1,10 +1,22 @@
 import { useState } from "react";
 import { GoogleGenAI } from "@google/genai";
 
-// console.log("API KEY CHECK :", import.meta.env.VITE_GEMINI_API_KEY)
-const ai = new GoogleGenAI({
-  apiKey: import.meta.env.VITE_GEMINI_API_KEY,
-});
+// Retrieve API key using Vite's standard import.meta.env
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+// Cache the GoogleGenAI client instance lazily once confirmed available
+let aiClientInstance = null;
+
+function getAiClient() {
+  if (!apiKey || !apiKey.trim()) {
+    return null;
+  }
+  if (!aiClientInstance) {
+    aiClientInstance = new GoogleGenAI({ apiKey: apiKey.trim() });
+  }
+  return aiClientInstance;
+}
+
 function generateId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -18,6 +30,7 @@ export function InputText({ setChatMessages, setIsLoading }) {
   function ChangeInput(event) {
     setInputText(event.target.value);
   }
+
   async function SendButton() {
     if (!inputText.trim()) return;
 
@@ -30,13 +43,34 @@ export function InputText({ setChatMessages, setIsLoading }) {
       id: generateId(),
     };
     setChatMessages((prev) => [...prev, userSendingMessage]);
+
+    // Validate that the Gemini API key is configured before attempting the request
+    if (!apiKey || !apiKey.trim()) {
+      console.error(
+        "Missing Gemini API key: VITE_GEMINI_API_KEY is not defined or is empty in import.meta.env.\n" +
+          "Ensure you have a .env file containing VITE_GEMINI_API_KEY=<your_api_key> and restart the Vite development server."
+      );
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          message:
+            "Configuration Error: Gemini API key is missing or not loaded. Please set VITE_GEMINI_API_KEY in your .env file and restart the Vite development server.",
+          sender: "robot",
+          id: generateId(),
+        },
+      ]);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      const ai = getAiClient();
       const result = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.5-flash",
         contents: currentPrompt,
       });
+
       const response = result.text;
       setChatMessages((prev) => [
         ...prev,
@@ -47,11 +81,40 @@ export function InputText({ setChatMessages, setIsLoading }) {
         },
       ]);
     } catch (error) {
-      console.error("Error generating response:", error);
+      console.error("Error generating response from Gemini API:", error);
+
+      let errorMessage =
+        "Sorry, an error occurred while fetching the response. Please check your connection or try again.";
+
+      const errorMsg = error?.message || "";
+      if (
+        errorMsg.includes("API key not valid") ||
+        errorMsg.includes("API_KEY_INVALID") ||
+        error?.status === 400 ||
+        error?.status === 403
+      ) {
+        errorMessage =
+          "Authentication Error: The provided Gemini API key is invalid. Please verify your VITE_GEMINI_API_KEY in the .env file.";
+      } else if (
+        error?.status === 429 ||
+        errorMsg.includes("RESOURCE_EXHAUSTED") ||
+        errorMsg.includes("quota")
+      ) {
+        errorMessage =
+          "Quota Exceeded: You have reached the Gemini API rate limit. Please wait a moment before trying again.";
+      } else if (
+        !navigator.onLine ||
+        errorMsg.includes("Failed to fetch") ||
+        errorMsg.includes("NetworkError")
+      ) {
+        errorMessage =
+          "Network Error: Unable to connect to the Gemini API. Please check your internet connection.";
+      }
+
       setChatMessages((prev) => [
         ...prev,
         {
-          message: "Sorry, an error occurred while fetching the response. Please check your connection or API key.",
+          message: errorMessage,
           sender: "robot",
           id: generateId(),
         },
@@ -60,6 +123,7 @@ export function InputText({ setChatMessages, setIsLoading }) {
       setIsLoading(false);
     }
   }
+
   function pressKeyDown(event) {
     if (event.key === "Enter") {
       SendButton();
@@ -68,6 +132,7 @@ export function InputText({ setChatMessages, setIsLoading }) {
       setInputText("");
     }
   }
+
   return (
     <div className="input-container">
       <input
