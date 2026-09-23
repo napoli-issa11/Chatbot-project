@@ -4,6 +4,12 @@ import { GoogleGenAI } from "@google/genai";
 // Retrieve API key using Vite's standard import.meta.env
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
+// System instructions to ground the AI with temporal awareness and a professional persona
+const SYSTEM_INSTRUCTION =
+  "You are an intelligent, articulate, and helpful AI assistant built for a developer's portfolio project. " +
+  "Current Date: September 2026. You are fully temporally aware, accurate, and grounded in the year 2026. " +
+  "Maintain a smart, polite, and professional persona with clear, well-structured, and insightful responses suitable for a developer's showcase.";
+
 // Cache the GoogleGenAI client instance lazily once confirmed available
 let aiClientInstance = null;
 
@@ -54,7 +60,7 @@ export function InputText({ setChatMessages, setIsLoading }) {
         ...prev,
         {
           message:
-            "Configuration Error: Gemini API key is missing or not loaded. Please set VITE_GEMINI_API_KEY in your .env file and restart the Vite development server.",
+            "Configuration Error: Gemini API key is missing or not loaded. Please set VITE_GEMINI_API_KEY in your environment and restart the application.",
           sender: "robot",
           id: generateId(),
         },
@@ -70,6 +76,9 @@ export function InputText({ setChatMessages, setIsLoading }) {
       const result = await ai.models.generateContent({
         model: model,
         contents: currentPrompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+        },
       });
 
       const response = result.text;
@@ -82,20 +91,61 @@ export function InputText({ setChatMessages, setIsLoading }) {
         },
       ]);
     } catch (error) {
+      // Log the full technical error to the console for developer debugging
       console.error("Error generating response from Gemini API:", error);
 
-      const technicalDetails =
-        error?.message ||
-        (typeof error === "object" ? JSON.stringify(error, null, 2) : String(error)) ||
-        "Unknown error occurred";
+      // Determine a clean, professional, user-friendly message for the UI
+      const errorStr = `${error?.message || ""} ${typeof error === "object" ? JSON.stringify(error) : String(error)}`;
+      const status = error?.status;
 
-      const statusInfo = error?.status ? `[Status ${error.status}] ` : "";
-      const displayMessage = `Error: ${statusInfo}${technicalDetails}`;
+      let userFriendlyMessage =
+        "I'm sorry, I encountered an issue processing your request. Please try again in a moment.";
+
+      if (
+        status === 503 ||
+        errorStr.includes("503") ||
+        errorStr.includes("UNAVAILABLE") ||
+        errorStr.includes("high traffic") ||
+        errorStr.includes("overloaded")
+      ) {
+        userFriendlyMessage =
+          "The AI service is currently experiencing high traffic. Please try again in a moment.";
+      } else if (
+        status === 429 ||
+        errorStr.includes("429") ||
+        errorStr.includes("RESOURCE_EXHAUSTED") ||
+        errorStr.includes("quota")
+      ) {
+        userFriendlyMessage =
+          "The service is temporarily busy due to rate limits. Please wait a moment and try again.";
+      } else if (
+        status === 400 ||
+        status === 403 ||
+        errorStr.includes("API key not valid") ||
+        errorStr.includes("API_KEY_INVALID")
+      ) {
+        userFriendlyMessage =
+          "Unable to authenticate with the AI service. Please verify your API configuration.";
+      } else if (
+        status === 404 ||
+        errorStr.includes("NOT_FOUND") ||
+        errorStr.includes("is not found")
+      ) {
+        userFriendlyMessage =
+          "The requested AI model is temporarily unavailable. Please try again shortly.";
+      } else if (
+        !navigator.onLine ||
+        errorStr.includes("Failed to fetch") ||
+        errorStr.includes("NetworkError")
+      ) {
+        userFriendlyMessage =
+          "Unable to connect to the AI service. Please check your internet connection and try again.";
+      }
 
       setChatMessages((prev) => [
         ...prev,
         {
-          message: displayMessage,
+          message: userFriendlyMessage,
           sender: "robot",
           id: generateId(),
         },
