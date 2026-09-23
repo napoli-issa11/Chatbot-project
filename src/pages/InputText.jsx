@@ -83,38 +83,18 @@ export function InputText({ setChatMessages, setIsLoading }) {
     } catch (error) {
       console.error("Error generating response from Gemini API:", error);
 
-      let errorMessage =
-        "Sorry, an error occurred while fetching the response. Please check your connection or try again.";
+      const technicalDetails =
+        error?.message ||
+        (typeof error === "object" ? JSON.stringify(error, null, 2) : String(error)) ||
+        "Unknown error occurred";
 
-      const errorMsg = error?.message || "";
-      if (
-        errorMsg.includes("API key not valid") ||
-        errorMsg.includes("API_KEY_INVALID") ||
-        error?.status === 400 ||
-        error?.status === 403
-      ) {
-        errorMessage =
-          "Authentication Error: The provided Gemini API key is invalid. Please verify your VITE_GEMINI_API_KEY in the .env file.";
-      } else if (
-        error?.status === 429 ||
-        errorMsg.includes("RESOURCE_EXHAUSTED") ||
-        errorMsg.includes("quota")
-      ) {
-        errorMessage =
-          "Quota Exceeded: You have reached the Gemini API rate limit. Please wait a moment before trying again.";
-      } else if (
-        !navigator.onLine ||
-        errorMsg.includes("Failed to fetch") ||
-        errorMsg.includes("NetworkError")
-      ) {
-        errorMessage =
-          "Network Error: Unable to connect to the Gemini API. Please check your internet connection.";
-      }
+      const statusInfo = error?.status ? `[Status ${error.status}] ` : "";
+      const displayMessage = `Error: ${statusInfo}${technicalDetails}`;
 
       setChatMessages((prev) => [
         ...prev,
         {
-          message: errorMessage,
+          message: displayMessage,
           sender: "robot",
           id: generateId(),
         },

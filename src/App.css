@@ -51,6 +51,7 @@
   max-width: 300px;
   overflow-wrap: break-word;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 .img-display {
   width: 35px;
